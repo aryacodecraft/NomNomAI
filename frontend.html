@@ -1,0 +1,1265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RecipeLens</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Epilogue:ital,wght@0,300;0,400;0,500;1,300;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ─── RESET & BASE ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #0d0e0f;
+  --surface:   #141517;
+  --surface2:  #1c1e21;
+  --surface3:  #242629;
+  --border:    rgba(255,255,255,0.07);
+  --border2:   rgba(255,255,255,0.12);
+  --text:      #e8e6e1;
+  --text2:     #8a8780;
+  --text3:     #5a5855;
+  --accent:    #e8642a;
+  --accent2:   #f0a435;
+  --green:     #52c27a;
+  --blue:      #4a9eff;
+  --radius:    12px;
+  --shadow:    0 8px 32px rgba(0,0,0,0.5);
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Epilogue', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ─── NOISE TEXTURE ────────────────────────────────────────────────── */
+body::after {
+  content: '';
+  position: fixed; inset: 0; z-index: 9999;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  opacity: 0.6;
+}
+
+/* ─── SCROLLBAR ─────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 3px; }
+
+/* ─── STATUS BAR ────────────────────────────────────────────────────── */
+#status-bar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  background: #1a0a04;
+  border-bottom: 1px solid rgba(232,100,42,0.3);
+  padding: 10px 24px;
+  display: flex; align-items: center; gap: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; color: var(--accent);
+  transform: translateY(-100%);
+  transition: transform 0.3s ease;
+}
+#status-bar.show { transform: translateY(0); }
+#status-bar.connected {
+  background: #041a0d;
+  border-color: rgba(82,194,122,0.3);
+  color: var(--green);
+}
+.status-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: currentColor;
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.3 } }
+
+/* ─── HEADER ────────────────────────────────────────────────────────── */
+header {
+  padding: 48px 48px 0;
+  display: flex; align-items: flex-end; justify-content: space-between;
+  margin-top: 44px;
+  position: relative;
+}
+.brand {
+  display: flex; flex-direction: column; gap: 4px;
+}
+.brand-name {
+  font-family: 'Syne', sans-serif;
+  font-size: 2.6rem; font-weight: 800;
+  letter-spacing: -0.04em; line-height: 1;
+  color: var(--text);
+}
+.brand-name em {
+  font-style: normal;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.brand-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase;
+  color: var(--text3);
+}
+.header-meta {
+  display: flex; gap: 32px; padding-bottom: 6px;
+}
+.meta-item { text-align: right; }
+.meta-num {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.5rem; font-weight: 700;
+  color: var(--text); line-height: 1;
+}
+.meta-num.loading-num { color: var(--text3); }
+.meta-label {
+  font-size: 11px; color: var(--text3);
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.1em; text-transform: uppercase;
+}
+
+/* ─── LAYOUT ────────────────────────────────────────────────────────── */
+.layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 0;
+  padding: 32px 48px 80px;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+/* ─── SIDEBAR ───────────────────────────────────────────────────────── */
+.sidebar {
+  padding-right: 32px;
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 32px;
+  position: sticky; top: 96px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.sidebar::-webkit-scrollbar { display: none; }
+
+.sidebar-section {}
+.section-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--text3); margin-bottom: 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+.section-label::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+
+/* Calorie slider */
+.cal-display {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px; color: var(--accent2);
+  margin-bottom: 12px; text-align: center;
+  letter-spacing: 0.05em;
+}
+.slider-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.slider-row-label {
+  font-size: 10px; font-family: 'JetBrains Mono', monospace;
+  color: var(--text3); width: 20px; flex-shrink: 0;
+}
+input[type=range] {
+  -webkit-appearance: none; flex: 1; height: 3px;
+  background: var(--surface3); border-radius: 2px; outline: none; cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 14px; height: 14px;
+  border-radius: 50%; background: var(--accent);
+  box-shadow: 0 0 8px rgba(232,100,42,0.5);
+  cursor: pointer; transition: transform 0.15s;
+}
+input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.3); }
+.slider-ends {
+  display: flex; justify-content: space-between;
+  font-size: 10px; color: var(--text3); font-family: 'JetBrains Mono', monospace;
+}
+
+/* Diet filters */
+.diet-list { display: flex; flex-direction: column; gap: 2px; }
+.diet-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: 8px; cursor: pointer;
+  transition: background 0.15s; user-select: none;
+}
+.diet-item:hover { background: var(--surface2); }
+.diet-item.active { background: var(--surface2); }
+.diet-cb {
+  width: 16px; height: 16px; border-radius: 4px;
+  border: 1.5px solid var(--surface3);
+  display: grid; place-items: center; flex-shrink: 0;
+  transition: all 0.15s;
+}
+.diet-item.active .diet-cb {
+  background: var(--accent); border-color: var(--accent);
+}
+.diet-item.active .diet-cb::after {
+  content: ''; width: 8px; height: 5px;
+  border-left: 2px solid white; border-bottom: 2px solid white;
+  transform: rotate(-45deg) translate(1px,-1px);
+  display: block;
+}
+.diet-name { font-size: 13px; color: var(--text2); flex: 1; }
+.diet-item.active .diet-name { color: var(--text); }
+.diet-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+/* Meal pills */
+.meal-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.meal-pill {
+  padding: 5px 12px; border-radius: 20px; font-size: 12px;
+  border: 1px solid var(--border2); cursor: pointer;
+  color: var(--text3); transition: all 0.15s;
+  font-family: 'JetBrains Mono', monospace; letter-spacing: 0.03em;
+}
+.meal-pill:hover { border-color: var(--accent); color: var(--text); }
+.meal-pill.active {
+  background: var(--accent); border-color: var(--accent);
+  color: white;
+}
+
+/* Cuisine filter */
+.cuisine-list { display: flex; flex-wrap: wrap; gap: 5px; }
+.cuisine-chip {
+  padding: 4px 10px; border-radius: 6px; font-size: 11px;
+  border: 1px solid var(--border); cursor: pointer;
+  color: var(--text3); transition: all 0.15s;
+  font-family: 'JetBrains Mono', monospace;
+}
+.cuisine-chip:hover { border-color: var(--border2); color: var(--text2); }
+.cuisine-chip.active {
+  background: var(--surface2); border-color: var(--border2); color: var(--text);
+}
+
+/* Reset button */
+.reset-btn {
+  width: 100%; padding: 9px; border-radius: 8px;
+  border: 1px solid var(--border); background: transparent;
+  font-size: 12px; font-family: 'JetBrains Mono', monospace;
+  color: var(--text3); cursor: pointer; transition: all 0.15s;
+  letter-spacing: 0.05em;
+}
+.reset-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ─── MAIN CONTENT ───────────────────────────────────────────────────── */
+.main { padding-left: 40px; }
+
+/* Mode tabs */
+.mode-bar {
+  display: flex; gap: 4px; margin-bottom: 28px;
+  background: var(--surface); padding: 4px;
+  border-radius: 10px; border: 1px solid var(--border);
+  width: fit-content;
+}
+.mode-btn {
+  padding: 8px 20px; border-radius: 7px; border: none;
+  background: transparent; cursor: pointer;
+  font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 600;
+  color: var(--text3); transition: all 0.2s; letter-spacing: 0.02em;
+}
+.mode-btn.active { background: var(--surface3); color: var(--text); }
+
+/* Search input */
+.search-wrap {
+  position: relative; margin-bottom: 8px;
+}
+.search-input {
+  width: 100%; padding: 16px 56px 16px 20px;
+  background: var(--surface); border: 1px solid var(--border2);
+  border-radius: var(--radius); color: var(--text);
+  font-family: 'Epilogue', sans-serif; font-size: 15px; outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.search-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(232,100,42,0.12);
+}
+.search-input::placeholder { color: var(--text3); }
+.search-go {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  width: 36px; height: 36px; border-radius: 8px;
+  background: var(--accent); border: none; cursor: pointer; color: white;
+  font-size: 16px; display: grid; place-items: center;
+  transition: background 0.15s, transform 0.1s;
+}
+.search-go:hover { background: #cc4f1a; transform: translateY(-50%) scale(1.06); }
+.search-go:active { transform: translateY(-50%) scale(0.96); }
+
+/* Suggestions */
+.suggestions { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 28px; }
+.sugg {
+  padding: 6px 14px; border-radius: 20px;
+  border: 1px dashed var(--border2); cursor: pointer;
+  font-size: 12px; color: var(--text3);
+  transition: all 0.15s; white-space: nowrap;
+}
+.sugg:hover { border-color: var(--accent); color: var(--text); border-style: solid; }
+
+/* Recipe select */
+.recipe-select-wrap { margin-bottom: 28px; }
+.recipe-select-label {
+  font-size: 12px; color: var(--text3); margin-bottom: 8px;
+  font-family: 'JetBrains Mono', monospace; letter-spacing: 0.05em;
+}
+.recipe-select {
+  width: 100%; padding: 14px 44px 14px 18px;
+  background: var(--surface); border: 1px solid var(--border2);
+  border-radius: var(--radius); color: var(--text);
+  font-family: 'Epilogue', sans-serif; font-size: 14px; outline: none;
+  cursor: pointer; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235a5855' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 14px center;
+  transition: border-color 0.2s;
+}
+.recipe-select:focus { border-color: var(--accent); }
+.recipe-select option { background: var(--surface2); }
+
+/* ─── RESULTS HEADER ─────────────────────────────────────────────────── */
+.results-bar {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 20px;
+  min-height: 36px;
+}
+.results-count {
+  font-family: 'Syne', sans-serif; font-size: 13px;
+  color: var(--text3);
+}
+.results-count strong { color: var(--accent2); font-size: 18px; }
+.sort-select {
+  margin-left: auto; padding: 6px 12px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text3); font-size: 12px;
+  font-family: 'JetBrains Mono', monospace; cursor: pointer; outline: none;
+}
+
+/* ─── CARDS GRID ─────────────────────────────────────────────────────── */
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 16px;
+}
+
+/* ─── RECIPE CARD ────────────────────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 20px;
+  cursor: pointer; position: relative; overflow: hidden;
+  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+  animation: fadeUp 0.35s ease both;
+}
+@keyframes fadeUp {
+  from { opacity:0; transform: translateY(16px); }
+  to   { opacity:1; transform: translateY(0); }
+}
+.card:hover {
+  transform: translateY(-4px);
+  border-color: var(--border2);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.5);
+}
+
+/* Left accent bar — colour-coded by match score */
+.card-accent {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: 3px; border-radius: 12px 0 0 12px;
+}
+
+/* Card header row */
+.card-head {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 12px;
+}
+.card-emoji { font-size: 1.6rem; line-height: 1; }
+.card-score {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; padding: 3px 8px; border-radius: 12px;
+  background: var(--surface2); color: var(--text3);
+}
+.card-score.good { color: var(--green); }
+.card-score.great { color: var(--accent2); }
+
+/* Card body */
+.card-name {
+  font-family: 'Syne', sans-serif;
+  font-size: 15px; font-weight: 700; line-height: 1.3;
+  color: var(--text); margin-bottom: 4px;
+}
+.card-meta {
+  font-size: 11px; color: var(--text3); margin-bottom: 14px;
+  text-transform: capitalize; letter-spacing: 0.02em;
+}
+
+/* Nutrition pills row */
+.card-nutrition {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 6px; margin-bottom: 14px;
+}
+.nutr-pill {
+  background: var(--surface2); border-radius: 6px;
+  padding: 7px 4px; text-align: center;
+}
+.nutr-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; font-weight: 500; color: var(--text);
+  line-height: 1;
+}
+.nutr-key {
+  font-size: 9px; color: var(--text3); text-transform: uppercase;
+  letter-spacing: 0.08em; margin-top: 3px;
+}
+
+/* Tags */
+.card-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.tag {
+  font-size: 10px; padding: 3px 8px; border-radius: 10px;
+  font-family: 'JetBrains Mono', monospace; letter-spacing: 0.03em;
+  border: 1px solid transparent;
+}
+
+/* Explanation strip */
+.card-explain {
+  margin-top: 12px; padding: 8px 10px;
+  background: rgba(82,194,122,0.06);
+  border: 1px solid rgba(82,194,122,0.15);
+  border-radius: 6px;
+  font-size: 11px; color: #52c27a; line-height: 1.5;
+}
+.card-explain::before { content: '↗ '; }
+
+/* Score breakdown mini */
+.score-breakdown {
+  display: flex; gap: 8px; margin-top: 10px;
+}
+.score-seg {
+  flex: 1; height: 3px; border-radius: 2px;
+  background: var(--surface3); overflow: hidden; position: relative;
+}
+.score-fill {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  border-radius: 2px; transition: width 0.5s ease;
+}
+
+/* ─── EMPTY & LOADING STATES ─────────────────────────────────────────── */
+.state-wrap {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 100px 40px; text-align: center;
+  gap: 16px;
+}
+.state-icon { font-size: 3rem; opacity: 0.3; }
+.state-title {
+  font-family: 'Syne', sans-serif; font-size: 1.3rem;
+  font-weight: 700; color: var(--text2);
+}
+.state-sub { font-size: 13px; color: var(--text3); max-width: 400px; line-height: 1.6; }
+
+/* Skeleton loader */
+.skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 16px;
+}
+.skeleton-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 20px;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+.skel { background: var(--surface2); border-radius: 4px; }
+.skel-head { height: 28px; width: 40%; margin-bottom: 12px; }
+.skel-title { height: 18px; width: 80%; margin-bottom: 6px; }
+.skel-sub { height: 12px; width: 55%; margin-bottom: 16px; }
+.skel-nutrition { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; margin-bottom: 14px; }
+.skel-nutr { height: 40px; border-radius: 6px; }
+.skel-tags { display: flex; gap: 6px; }
+.skel-tag { height: 20px; border-radius: 10px; }
+@keyframes shimmer {
+  0%,100% { opacity: 0.5 } 50% { opacity: 1 }
+}
+
+/* ─── SERVER OFFLINE BANNER ──────────────────────────────────────────── */
+.offline-banner {
+  background: var(--surface); border: 1px solid rgba(232,100,42,0.3);
+  border-radius: var(--radius); padding: 28px 32px;
+  margin-bottom: 24px; display: none;
+}
+.offline-banner.show { display: block; }
+.offline-title {
+  font-family: 'Syne', sans-serif; font-size: 1rem; font-weight: 700;
+  color: var(--accent); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+}
+.offline-steps { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.offline-step {
+  display: flex; align-items: flex-start; gap: 10px;
+  font-size: 13px; color: var(--text2);
+}
+.step-num {
+  min-width: 20px; height: 20px; border-radius: 50%;
+  background: var(--surface2); border: 1px solid var(--border2);
+  display: grid; place-items: center;
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text3);
+}
+.code-inline {
+  font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  background: var(--surface2); padding: 2px 7px; border-radius: 4px;
+  color: var(--accent2); border: 1px solid var(--border);
+}
+.retry-btn {
+  margin-top: 16px; padding: 9px 20px; border-radius: 8px;
+  background: var(--accent); border: none; color: white; cursor: pointer;
+  font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 600;
+  transition: background 0.15s;
+}
+.retry-btn:hover { background: #cc4f1a; }
+
+/* ─── MODAL ──────────────────────────────────────────────────────────── */
+.overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,0.75);
+  backdrop-filter: blur(6px);
+  display: none; place-items: center;
+}
+.overlay.open { display: grid; }
+.modal {
+  background: var(--surface); border: 1px solid var(--border2);
+  border-radius: 20px; width: 90%; max-width: 560px;
+  max-height: 88vh; overflow-y: auto;
+  padding: 36px; position: relative;
+  box-shadow: 0 40px 100px rgba(0,0,0,0.7);
+  animation: modalIn 0.25s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes modalIn {
+  from { opacity:0; transform: scale(0.92) translateY(20px); }
+  to   { opacity:1; transform: none; }
+}
+.modal-close {
+  position: absolute; top: 16px; right: 16px;
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--surface2); border: 1px solid var(--border);
+  cursor: pointer; color: var(--text3); font-size: 14px;
+  display: grid; place-items: center; transition: all 0.15s;
+}
+.modal-close:hover { background: var(--surface3); color: var(--text); }
+.modal-emoji { font-size: 2.5rem; margin-bottom: 10px; }
+.modal-name {
+  font-family: 'Syne', sans-serif; font-size: 1.6rem; font-weight: 800;
+  line-height: 1.2; margin-bottom: 4px; color: var(--text);
+}
+.modal-sub { font-size: 12px; color: var(--text3); margin-bottom: 24px; text-transform: capitalize; }
+
+.modal-nutrition {
+  display: grid; grid-template-columns: repeat(3,1fr);
+  gap: 10px; margin-bottom: 24px;
+}
+.modal-nutr {
+  background: var(--surface2); border-radius: 10px;
+  padding: 14px 10px; text-align: center;
+  border: 1px solid var(--border);
+}
+.modal-nutr-val {
+  font-family: 'Syne', sans-serif; font-size: 1.3rem; font-weight: 700;
+  color: var(--accent2); line-height: 1;
+}
+.modal-nutr-key {
+  font-size: 10px; color: var(--text3); text-transform: uppercase;
+  letter-spacing: 0.1em; margin-top: 4px;
+}
+
+.modal-section {
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--text3); margin: 18px 0 8px;
+  padding-bottom: 6px; border-bottom: 1px solid var(--border);
+}
+.modal-ings {
+  font-size: 13px; color: var(--text2); line-height: 1.9;
+  text-transform: capitalize;
+}
+.modal-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.modal-tag {
+  font-size: 11px; padding: 4px 12px; border-radius: 20px;
+  font-family: 'JetBrains Mono', monospace;
+}
+.modal-action {
+  width: 100%; margin-top: 24px; padding: 14px;
+  background: var(--accent); border: none; border-radius: 10px;
+  color: white; cursor: pointer; font-family: 'Syne', sans-serif;
+  font-size: 14px; font-weight: 700; letter-spacing: 0.02em;
+  transition: background 0.15s; display: flex; align-items: center;
+  justify-content: center; gap: 8px;
+}
+.modal-action:hover { background: #cc4f1a; }
+
+/* ─── RESPONSIVE ─────────────────────────────────────────────────────── */
+@media (max-width: 960px) {
+  header { padding: 32px 20px 0; flex-direction: column; gap: 16px; align-items: flex-start; }
+  .layout { grid-template-columns: 1fr; padding: 20px; }
+  .sidebar { position: static; max-height: none; padding-right: 0; padding-bottom: 24px; border-right: none; border-bottom: 1px solid var(--border); }
+  .main { padding-left: 0; padding-top: 28px; }
+  .header-meta { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── STATUS BAR ── -->
+<div id="status-bar">
+  <div class="status-dot"></div>
+  <span id="status-text">Connecting to RecipeLens API...</span>
+</div>
+
+<!-- ── HEADER ── -->
+<header>
+  <div class="brand">
+    <div class="brand-name">Recipe<em>Lens</em></div>
+    <div class="brand-tag">Semantic ML Recommendation Engine</div>
+  </div>
+  <div class="header-meta">
+    <div class="meta-item">
+      <div class="meta-num" id="stat-recipes"><span class="loading-num">—</span></div>
+      <div class="meta-label">Recipes</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-num" id="stat-cuisines"><span class="loading-num">—</span></div>
+      <div class="meta-label">Cuisines</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-num">NLP</div>
+      <div class="meta-label">Powered</div>
+    </div>
+  </div>
+</header>
+
+<!-- ── LAYOUT ── -->
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+
+    <div class="sidebar-section">
+      <div class="section-label">Calories / Serving</div>
+      <div class="cal-display" id="cal-display">0 – 1000 kcal</div>
+      <div class="slider-row">
+        <span class="slider-row-label">Min</span>
+        <input type="range" id="cal-min" min="0" max="1000" value="0" step="10">
+      </div>
+      <div class="slider-row">
+        <span class="slider-row-label">Max</span>
+        <input type="range" id="cal-max" min="0" max="1000" value="1000" step="10">
+      </div>
+      <div class="slider-ends"><span>0</span><span>1000 kcal</span></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-label">Dietary Restrictions</div>
+      <div class="diet-list" id="diet-list">
+        <!-- populated from /filters -->
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-label">Meal Type</div>
+      <div class="meal-pills" id="meal-pills">
+        <!-- populated from /filters -->
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-label">Cuisine</div>
+      <div class="cuisine-list" id="cuisine-list">
+        <!-- populated from /filters -->
+      </div>
+    </div>
+
+    <button class="reset-btn" id="reset-btn">↺ Reset All Filters</button>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- Offline banner -->
+    <div class="offline-banner" id="offline-banner">
+      <div class="offline-title">⚡ API server not running</div>
+      <ul class="offline-steps">
+        <li class="offline-step">
+          <span class="step-num">1</span>
+          <span>Install: <code class="code-inline">pip install -r requirements.txt</code></span>
+        </li>
+        <li class="offline-step">
+          <span class="step-num">2</span>
+          <span>Preprocess: <code class="code-inline">python preprocess.py --data recipes-with-nutrition.csv</code></span>
+        </li>
+        <li class="offline-step">
+          <span class="step-num">3</span>
+          <span>Start API: <code class="code-inline">uvicorn api:app --host 0.0.0.0 --port 8000</code></span>
+        </li>
+        <li class="offline-step">
+          <span class="step-num">4</span>
+          <span>Open this file in your browser — it connects automatically</span>
+        </li>
+      </ul>
+      <button class="retry-btn" id="retry-btn">↻ Retry Connection</button>
+    </div>
+
+    <!-- Mode selector -->
+    <div class="mode-bar">
+      <button class="mode-btn active" id="tab-search" onclick="setMode('search')">🔍 Search</button>
+      <button class="mode-btn" id="tab-similar" onclick="setMode('similar')">✦ Find Similar</button>
+    </div>
+
+    <!-- Search mode -->
+    <div id="mode-search">
+      <div class="search-wrap">
+        <input class="search-input" id="search-input" type="text"
+          placeholder="e.g. healthy vegetarian pasta, spicy Indian curry, quick breakfast…"
+          onkeydown="if(event.key==='Enter') doSearch()">
+        <button class="search-go" onclick="doSearch()">→</button>
+      </div>
+      <div class="suggestions" id="suggestions">
+        <span class="sugg" onclick="quickSearch('Italian pasta creamy')">🍝 Italian pasta</span>
+        <span class="sugg" onclick="quickSearch('healthy vegetarian')">🥗 Healthy veg</span>
+        <span class="sugg" onclick="quickSearch('quick eggs breakfast')">🍳 Quick breakfast</span>
+        <span class="sugg" onclick="quickSearch('Indian curry spicy')">🍛 Indian curry</span>
+        <span class="sugg" onclick="quickSearch('Japanese ramen noodle soup')">🍜 Ramen</span>
+        <span class="sugg" onclick="quickSearch('Mexican tacos')">🌮 Mexican</span>
+        <span class="sugg" onclick="quickSearch('high protein low calorie')">💪 High protein</span>
+        <span class="sugg" onclick="quickSearch('vegan dessert chocolate')">🌱 Vegan dessert</span>
+      </div>
+    </div>
+
+    <!-- Similar mode -->
+    <div id="mode-similar" style="display:none">
+      <div class="recipe-select-label">Select a recipe to find similar ones:</div>
+      <select class="recipe-select" id="recipe-select" onchange="doSimilar()">
+        <option value="">— Choose a recipe —</option>
+      </select>
+    </div>
+
+    <!-- Results bar -->
+    <div class="results-bar" id="results-bar" style="display:none">
+      <div class="results-count" id="results-count"></div>
+      <select class="sort-select" id="sort-select" onchange="renderSorted()">
+        <option value="score">Best Match</option>
+        <option value="cal_asc">Calories ↑</option>
+        <option value="cal_desc">Calories ↓</option>
+        <option value="protein">Protein ↓</option>
+      </select>
+    </div>
+
+    <!-- Results area -->
+    <div id="results-area">
+      <div class="state-wrap">
+        <div class="state-icon">🍽️</div>
+        <div class="state-title">Ready to discover</div>
+        <div class="state-sub">Search for any recipe, ingredient, or cuisine style above. Results are powered by NLP embeddings trained on your dataset.</div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ── MODAL ── -->
+<div class="overlay" id="overlay" onclick="if(event.target===this) closeModal()">
+  <div class="modal" id="modal-body"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  CONFIG
+// ═══════════════════════════════════════════════════════════════
+const API = 'http://localhost:8000';
+
+const EMOJI = {
+  italian:'🍝', indian:'🍛', mexican:'🌮', american:'🍔', japanese:'🍣',
+  mediterranean:'🥗', chinese:'🥢', french:'🥐', thai:'🌶️', spanish:'🥘',
+  korean:'🍱', unknown:'🍽️'
+};
+
+const DIET_COLORS = {
+  'Vegetarian':'#52c27a','Vegan':'#7eda8a','Gluten-Free':'#f0a435',
+  'Dairy-Free':'#4a9eff','Egg-Free':'#f5d742','Nut-Free':'#ff6b35',
+  'Pescatarian':'#38d9d9','Balanced':'#8a7aff','High-Protein':'#ff7a9a',
+  'Low-Fat':'#5ec4ff','Low-Calorie':'#7eda8a','High-Fiber':'#ff9966',
+  'Low-Sugar':'#e87dff','Low-Sodium':'#7ab8ff'
+};
+
+// ═══════════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════════
+let state = {
+  mode: 'search',
+  connected: false,
+  loading: false,
+  results: [],
+  filters: null,
+  activeFilters: { diet: [], meal: null, cuisine: null, calMin: 0, calMax: 1000 }
+};
+
+// ═══════════════════════════════════════════════════════════════
+//  API HELPERS
+// ═══════════════════════════════════════════════════════════════
+async function apiFetch(path, opts={}) {
+  const res = await fetch(API + path, {
+    headers: { 'Content-Type': 'application/json' },
+    ...opts
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function apiPost(path, body) {
+  return apiFetch(path, { method: 'POST', body: JSON.stringify(body) });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  INITIALISATION
+// ═══════════════════════════════════════════════════════════════
+async function init() {
+  showStatus('Connecting to RecipeLens API…', false);
+  try {
+    const health = await apiFetch('/');
+    state.connected = true;
+    showStatus(`Connected · ${health.n_recipes.toLocaleString()} recipes loaded`, true);
+    document.getElementById('stat-recipes').textContent = health.n_recipes.toLocaleString();
+
+    // Load filters
+    const filters = await apiFetch('/filters');
+    state.filters = filters;
+
+    // Update header stats
+    document.getElementById('stat-cuisines').textContent = filters.cuisine_types.length;
+
+    // Update slider max to dataset max
+    const calMax = Math.ceil(filters.calorie_range[1] / 100) * 100;
+    ['cal-min', 'cal-max'].forEach(id => {
+      document.getElementById(id).max = calMax;
+    });
+    document.getElementById('cal-max').value = calMax;
+    state.activeFilters.calMax = calMax;
+    updateCalDisplay();
+
+    // Build sidebar
+    buildDietFilters(filters.diet_labels);
+    buildMealPills(filters.meal_types);
+    buildCuisinePills(filters.cuisine_types);
+
+    // Populate recipe dropdown
+    const recipes = await apiFetch('/recipes');
+    populateDropdown(recipes);
+
+    document.getElementById('offline-banner').classList.remove('show');
+  } catch(e) {
+    state.connected = false;
+    showStatus('API not reachable — start the server first', false);
+    document.getElementById('offline-banner').classList.add('show');
+    console.error('API connection failed:', e);
+  }
+}
+
+function showStatus(msg, connected) {
+  const bar = document.getElementById('status-bar');
+  document.getElementById('status-text').textContent = msg;
+  bar.className = 'show' + (connected ? ' connected' : '');
+  if (connected) setTimeout(() => { bar.className = ''; }, 3000);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SIDEBAR BUILD
+// ═══════════════════════════════════════════════════════════════
+function buildDietFilters(labels) {
+  const el = document.getElementById('diet-list');
+  el.innerHTML = labels.map(label => {
+    const color = DIET_COLORS[label] || '#888';
+    return `<div class="diet-item" data-diet="${label}" onclick="toggleDiet('${label}')">
+      <div class="diet-cb"></div>
+      <span class="diet-name">${label}</span>
+      <span class="diet-dot" style="background:${color}"></span>
+    </div>`;
+  }).join('');
+}
+
+function buildMealPills(meals) {
+  const el = document.getElementById('meal-pills');
+  el.innerHTML = meals.map(m =>
+    `<span class="meal-pill" data-meal="${m}" onclick="toggleMeal('${m}')">${capitalise(m)}</span>`
+  ).join('');
+}
+
+function buildCuisinePills(cuisines) {
+  const el = document.getElementById('cuisine-list');
+  el.innerHTML = cuisines.map(c =>
+    `<span class="cuisine-chip" data-cuisine="${c}" onclick="toggleCuisine('${c}')">${capitalise(c)}</span>`
+  ).join('');
+}
+
+function populateDropdown(recipes) {
+  const sel = document.getElementById('recipe-select');
+  recipes.forEach(r => {
+    const opt = document.createElement('option');
+    opt.value = r.recipe_id;
+    const cuisine = r.cuisine || '';
+    opt.textContent = (EMOJI[cuisine] || '🍽️') + ' ' + r.name;
+    sel.appendChild(opt);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  FILTER INTERACTIONS
+// ═══════════════════════════════════════════════════════════════
+function toggleDiet(label) {
+  const el = document.querySelector(`.diet-item[data-diet="${label}"]`);
+  const idx = state.activeFilters.diet.indexOf(label);
+  if (idx > -1) {
+    state.activeFilters.diet.splice(idx, 1);
+    el.classList.remove('active');
+  } else {
+    state.activeFilters.diet.push(label);
+    el.classList.add('active');
+  }
+  reapply();
+}
+
+function toggleMeal(meal) {
+  const isActive = state.activeFilters.meal === meal;
+  document.querySelectorAll('.meal-pill').forEach(p => p.classList.remove('active'));
+  state.activeFilters.meal = isActive ? null : meal;
+  if (!isActive) document.querySelector(`.meal-pill[data-meal="${meal}"]`).classList.add('active');
+  reapply();
+}
+
+function toggleCuisine(cuisine) {
+  const isActive = state.activeFilters.cuisine === cuisine;
+  document.querySelectorAll('.cuisine-chip').forEach(c => c.classList.remove('active'));
+  state.activeFilters.cuisine = isActive ? null : cuisine;
+  if (!isActive) document.querySelector(`.cuisine-chip[data-cuisine="${cuisine}"]`).classList.add('active');
+  reapply();
+}
+
+function updateCalDisplay() {
+  const mn = parseInt(document.getElementById('cal-min').value);
+  const mx = parseInt(document.getElementById('cal-max').value);
+  state.activeFilters.calMin = mn;
+  state.activeFilters.calMax = mx;
+  document.getElementById('cal-display').textContent = `${mn} – ${mx} kcal`;
+}
+
+document.getElementById('cal-min').addEventListener('input', function() {
+  const mx = parseInt(document.getElementById('cal-max').value);
+  if (parseInt(this.value) > mx) this.value = mx;
+  updateCalDisplay(); reapply();
+});
+document.getElementById('cal-max').addEventListener('input', function() {
+  const mn = parseInt(document.getElementById('cal-min').value);
+  if (parseInt(this.value) < mn) this.value = mn;
+  updateCalDisplay(); reapply();
+});
+
+function resetFilters() {
+  state.activeFilters = { diet: [], meal: null, cuisine: null, calMin: 0, calMax: parseInt(document.getElementById('cal-max').max) };
+  document.querySelectorAll('.diet-item').forEach(e => e.classList.remove('active'));
+  document.querySelectorAll('.meal-pill').forEach(e => e.classList.remove('active'));
+  document.querySelectorAll('.cuisine-chip').forEach(e => e.classList.remove('active'));
+  document.getElementById('cal-min').value = 0;
+  document.getElementById('cal-max').value = document.getElementById('cal-max').max;
+  updateCalDisplay();
+  reapply();
+}
+document.getElementById('reset-btn').addEventListener('click', resetFilters);
+
+function reapply() {
+  if (state.mode === 'search') {
+    const q = document.getElementById('search-input').value.trim();
+    if (q) doSearch();
+  } else {
+    const id = document.getElementById('recipe-select').value;
+    if (id) doSimilar();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  MODE SWITCHING
+// ═══════════════════════════════════════════════════════════════
+function setMode(mode) {
+  state.mode = mode;
+  document.getElementById('mode-search').style.display  = mode === 'search'  ? '' : 'none';
+  document.getElementById('mode-similar').style.display = mode === 'similar' ? '' : 'none';
+  document.getElementById('tab-search').className  = 'mode-btn' + (mode === 'search'  ? ' active' : '');
+  document.getElementById('tab-similar').className = 'mode-btn' + (mode === 'similar' ? ' active' : '');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SEARCH
+// ═══════════════════════════════════════════════════════════════
+async function doSearch() {
+  if (!state.connected) {
+    showStatus('Start the API server first', false);
+    return;
+  }
+  const q = document.getElementById('search-input').value.trim();
+  if (!q) return;
+
+  showSkeleton();
+
+  try {
+    const body = {
+      query: q,
+      diet_filters: state.activeFilters.diet,
+      calorie_min: state.activeFilters.calMin,
+      calorie_max: state.activeFilters.calMax,
+      meal_type: state.activeFilters.meal || undefined,
+      top_k: 20
+    };
+    const data = await apiPost('/search', body);
+
+    // Apply cuisine filter client-side (not in backend yet)
+    let results = data.results;
+    if (state.activeFilters.cuisine) {
+      results = results.filter(r => r.cuisine === state.activeFilters.cuisine);
+    }
+    state.results = results;
+    renderResults(results, data.n_results);
+  } catch(e) {
+    showError('Search failed: ' + e.message);
+  }
+}
+
+async function doSimilar() {
+  if (!state.connected) { showStatus('Start the API server first', false); return; }
+  const id = parseInt(document.getElementById('recipe-select').value);
+  if (isNaN(id)) return;
+
+  showSkeleton();
+
+  try {
+    const body = {
+      recipe_id: id,
+      diet_filters: state.activeFilters.diet,
+      calorie_min: state.activeFilters.calMin,
+      calorie_max: state.activeFilters.calMax,
+      top_k: 20
+    };
+    const data = await apiPost('/similar', body);
+
+    let results = data.results;
+    if (state.activeFilters.cuisine) {
+      results = results.filter(r => r.cuisine === state.activeFilters.cuisine);
+    }
+    state.results = results;
+    renderResults(results, data.n_results, data.source);
+  } catch(e) {
+    showError('Request failed: ' + e.message);
+  }
+}
+
+function quickSearch(q) {
+  setMode('search');
+  document.getElementById('search-input').value = q;
+  doSearch();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  RENDER RESULTS
+// ═══════════════════════════════════════════════════════════════
+function renderSorted() {
+  if (state.results.length) renderResults(state.results);
+}
+
+function sortResults(results) {
+  const s = document.getElementById('sort-select').value;
+  return [...results].sort((a,b) => {
+    if (s === 'cal_asc')  return (a.calories_per_serving||0) - (b.calories_per_serving||0);
+    if (s === 'cal_desc') return (b.calories_per_serving||0) - (a.calories_per_serving||0);
+    if (s === 'protein')  return (b.protein_g||0) - (a.protein_g||0);
+    return (b.similarity_score||0) - (a.similarity_score||0);
+  });
+}
+
+function renderResults(results, totalFromServer, source) {
+  const area  = document.getElementById('results-area');
+  const bar   = document.getElementById('results-bar');
+  const count = document.getElementById('results-count');
+
+  if (!results.length) {
+    bar.style.display = 'none';
+    area.innerHTML = `<div class="state-wrap">
+      <div class="state-icon">🔍</div>
+      <div class="state-title">No recipes found</div>
+      <div class="state-sub">Try loosening your filters — fewer dietary restrictions or a wider calorie range.</div>
+    </div>`;
+    return;
+  }
+
+  bar.style.display = 'flex';
+  const label = source ? `Similar to <strong>${source.name}</strong>` : 'Results';
+  count.innerHTML = `${label} &nbsp; <strong>${results.length}</strong> recipes`;
+
+  const sorted = sortResults(results);
+  area.innerHTML = `<div class="cards-grid">${sorted.map((r,i) => cardHTML(r, i)).join('')}</div>`;
+}
+
+function scoreColor(s) {
+  if (s > 0.7) return '#f0a435';
+  if (s > 0.4) return '#52c27a';
+  return '#4a4e52';
+}
+function scoreClass(s) {
+  if (s > 0.7) return 'great';
+  if (s > 0.4) return 'good';
+  return '';
+}
+
+function cardHTML(r, i) {
+  const emoji = EMOJI[r.cuisine] || '🍽️';
+  const score = Math.min(r.similarity_score || 0, 1);
+  const pct = Math.round(score * 100);
+
+  const dietTags = (r.diet_labels || []).slice(0,3).map(d => {
+    const c = DIET_COLORS[d] || '#888';
+    return `<span class="tag" style="background:${c}18;color:${c};border-color:${c}30">${d}</span>`;
+  }).join('');
+
+  const healthTags = (r.health_labels || []).slice(0,2).map(h => {
+    const c = DIET_COLORS[h] || '#8a7aff';
+    return `<span class="tag" style="background:${c}18;color:${c};border-color:${c}30">${h}</span>`;
+  }).join('');
+
+  const explanation = r.explanation
+    ? `<div class="card-explain">${r.explanation}</div>` : '';
+
+  // Score breakdown bars (only for similar mode)
+  let scoreBar = '';
+  if (r.nlp_score !== undefined) {
+    scoreBar = `<div class="score-breakdown" title="NLP / Cuisine / Nutrition similarity">
+      <div class="score-seg" title="NLP: ${(r.nlp_score*100).toFixed(0)}%">
+        <div class="score-fill" style="width:${Math.min(r.nlp_score*100,100)}%;background:#4a9eff"></div>
+      </div>
+      <div class="score-seg" title="Cuisine: ${(r.cuisine_score*100).toFixed(0)}%">
+        <div class="score-fill" style="width:${Math.min(r.cuisine_score*100,100)}%;background:#f0a435"></div>
+      </div>
+      <div class="score-seg" title="Nutrition: ${(r.nutrition_score*100).toFixed(0)}%">
+        <div class="score-fill" style="width:${Math.min(r.nutrition_score*100,100)}%;background:#52c27a"></div>
+      </div>
+    </div>`;
+  }
+
+  return `<div class="card" style="animation-delay:${i*25}ms" onclick="openModal(${r.recipe_id})">
+    <div class="card-accent" style="background:${scoreColor(score)}"></div>
+    <div class="card-head">
+      <span class="card-emoji">${emoji}</span>
+      <span class="card-score ${scoreClass(score)}">${pct > 0 ? pct+'% match' : '—'}</span>
+    </div>
+    <div class="card-name">${r.name}</div>
+    <div class="card-meta">${r.cuisine} · ${r.dish_type} · ${r.meal_type}</div>
+    <div class="card-nutrition">
+      <div class="nutr-pill"><div class="nutr-val">${Math.round(r.calories_per_serving||0)}</div><div class="nutr-key">kcal</div></div>
+      <div class="nutr-pill"><div class="nutr-val">${Math.round(r.protein_g||0)}g</div><div class="nutr-key">protein</div></div>
+      <div class="nutr-pill"><div class="nutr-val">${Math.round(r.carbs_g||0)}g</div><div class="nutr-key">carbs</div></div>
+      <div class="nutr-pill"><div class="nutr-val">${Math.round(r.fat_g||0)}g</div><div class="nutr-key">fat</div></div>
+    </div>
+    <div class="card-tags">${dietTags}${healthTags}</div>
+    ${explanation}
+    ${scoreBar}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  LOADING / ERROR STATES
+// ═══════════════════════════════════════════════════════════════
+function showSkeleton() {
+  document.getElementById('results-bar').style.display = 'none';
+  document.getElementById('results-area').innerHTML = `<div class="skeleton-grid">
+    ${[...Array(9)].map((_,i) => `<div class="skeleton-card" style="animation-delay:${i*60}ms">
+      <div class="skel skel-head"></div>
+      <div class="skel skel-title"></div>
+      <div class="skel skel-sub"></div>
+      <div class="skel-nutrition">${[...Array(4)].map(()=>`<div class="skel skel-nutr"></div>`).join('')}</div>
+      <div class="skel-tags"><div class="skel skel-tag" style="width:70px"></div><div class="skel skel-tag" style="width:55px"></div></div>
+    </div>`).join('')}
+  </div>`;
+}
+
+function showError(msg) {
+  document.getElementById('results-bar').style.display = 'none';
+  document.getElementById('results-area').innerHTML = `<div class="state-wrap">
+    <div class="state-icon">⚠️</div>
+    <div class="state-title">Something went wrong</div>
+    <div class="state-sub">${msg}</div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  MODAL
+// ═══════════════════════════════════════════════════════════════
+async function openModal(recipeId) {
+  try {
+    const r = await apiFetch(`/recipes/${recipeId}`);
+    const emoji = EMOJI[r.cuisine] || '🍽️';
+
+    const nutrBoxes = [
+      ['Calories', Math.round(r.calories_per_serving||0), 'kcal'],
+      ['Protein',  Math.round(r.protein_g||0), 'g'],
+      ['Carbs',    Math.round(r.carbs_g||0), 'g'],
+      ['Fat',      Math.round(r.fat_g||0), 'g'],
+      ['Fiber',    Math.round(r.fiber_g||0), 'g'],
+      ['Sugar',    Math.round(r.sugar_g||0), 'g'],
+    ].map(([k,v,u]) => `<div class="modal-nutr">
+      <div class="modal-nutr-val">${v}<small style="font-size:0.6em;color:var(--text3)">${u}</small></div>
+      <div class="modal-nutr-key">${k}</div>
+    </div>`).join('');
+
+    const allTags = [...(r.diet_labels||[]), ...(r.health_labels||[])].map(t => {
+      const c = DIET_COLORS[t] || '#888';
+      return `<span class="modal-tag" style="background:${c}18;color:${c}">${t}</span>`;
+    }).join('');
+
+    const ings = (r.ingredients_clean || '').split(' ')
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' · ');
+
+    document.getElementById('modal-body').innerHTML = `
+      <button class="modal-close" onclick="closeModal()">✕</button>
+      <div class="modal-emoji">${emoji}</div>
+      <div class="modal-name">${r.name}</div>
+      <div class="modal-sub">${r.cuisine} · ${r.dish_type} · ${r.meal_type}</div>
+      <div class="modal-nutrition">${nutrBoxes}</div>
+      <div class="modal-section">Key Ingredients</div>
+      <div class="modal-ings">${ings || '—'}</div>
+      <div class="modal-section">Labels</div>
+      <div class="modal-tags">${allTags || '<span style="color:var(--text3);font-size:12px">None specified</span>'}</div>
+      <button class="modal-action" onclick="findSimilar(${r.recipe_id})">
+        ✦ Find Similar Recipes
+      </button>
+    `;
+    document.getElementById('overlay').classList.add('open');
+  } catch(e) {
+    console.error('Modal load error:', e);
+  }
+}
+
+function closeModal() { document.getElementById('overlay').classList.remove('open'); }
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeModal(); });
+
+function findSimilar(id) {
+  closeModal();
+  setMode('similar');
+  document.getElementById('recipe-select').value = id;
+  doSimilar();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  UTILS
+// ═══════════════════════════════════════════════════════════════
+function capitalise(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+document.getElementById('retry-btn').addEventListener('click', init);
+
+// ═══════════════════════════════════════════════════════════════
+//  BOOT
+// ═══════════════════════════════════════════════════════════════
+init();
+</script>
+</body>
+</html>
