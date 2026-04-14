@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RecipeLens</title>
+<title>NomNomAI</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Epilogue:ital,wght@0,300;0,400;0,500;1,300;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -222,8 +222,8 @@ code{font-family:'JetBrains Mono',monospace;font-size:11px;background:var(--surf
 
 <header>
   <div>
-    <div class="brand-name">Recipe<em>Lens</em></div>
-    <div class="brand-tag">Semantic ML Recommendation Engine</div>
+    <div class="brand-name">NomNom<em>AI</em></div>
+    <div class="brand-tag">Your AI-Powered Recipe Discovery Engine</div>
   </div>
   <div class="header-meta">
     <div class="meta-item"><div class="meta-num" id="stat-recipes">—</div><div class="meta-label">Recipes</div></div>
@@ -482,12 +482,11 @@ function addIngredient(n){const c=n.toLowerCase().trim();if(!c||S.pantry.include
 function removeIngredient(n){S.pantry=S.pantry.filter(i=>i!==n);renderPantry();syncPantry();document.querySelectorAll('.qing').forEach(el=>{if(el.textContent.includes(n))el.classList.remove('added');});}
 function clearPantry(){S.pantry=[];syncPantry();document.querySelectorAll('.qing').forEach(el=>el.classList.remove('added'));renderPantry();resetArea();}
 function renderPantry(){
-  const wrap=document.getElementById('pantry-tags'),empty=document.getElementById('pantry-empty');
+  const wrap=document.getElementById('pantry-tags');
   document.getElementById('ing-count').textContent=S.pantry.length?'('+S.pantry.length+')':'';
   document.getElementById('btn-badge').textContent=S.pantry.length+' ingredient'+(S.pantry.length!==1?'s':'');
   document.getElementById('find-btn').disabled=S.pantry.length===0;
-  if(!S.pantry.length){wrap.innerHTML='';empty.style.display='';wrap.appendChild(empty);return;}
-  empty.style.display='none';
+  if(!S.pantry.length){wrap.innerHTML='<span class="pantry-empty">No ingredients added yet — type above or click quick-add</span>';return;}
   wrap.innerHTML=S.pantry.map(ing=>`<div class="ing-tag"><span>${ingEmoji(ing)}</span><span>${ing}</span><button onclick="removeIngredient('${ing}')" title="Remove">✕</button></div>`).join('');
 }
 function addIngredientFromInput(){const inp=document.getElementById('ing-input');const v=inp.value.trim();if(v){addIngredient(v);inp.value='';closeAC();}}
