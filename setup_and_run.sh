@@ -5,12 +5,22 @@
 # ─────────────────────────────────────────────────────────────
 set -e
 
-echo "📦 Installing dependencies..."
-pip install pandas numpy scikit-learn fastapi uvicorn datasets huggingface-hub
+# Detect python command
+if command -v python3 &>/dev/null; then
+    PY_CMD="python3"
+elif command -v python &>/dev/null; then
+    PY_CMD="python"
+else
+    echo "Python is not installed or not in PATH."
+    exit 1
+fi
+
+echo "📦 Installing dependencies from requirements.txt..."
+$PY_CMD -m pip install -r requirements.txt
 
 echo ""
 echo "📥 Downloading dataset from HuggingFace (39,400 recipes)..."
-python3 - <<PYEOF
+$PY_CMD - <<PYEOF
 from datasets import load_dataset
 print("Downloading datahiveai/recipes-with-nutrition ...")
 ds = load_dataset("datahiveai/recipes-with-nutrition", split="train")
@@ -21,11 +31,12 @@ PYEOF
 
 echo ""
 echo "⚙️  Running preprocessing (builds ./artifacts/)..."
-python3 preprocess.py --data recipes-with-nutrition.csv --out ./artifacts
+$PY_CMD preprocess.py --data recipes-with-nutrition.csv --out ./artifacts
 
 echo ""
 echo "🚀 Starting API server on http://localhost:8000"
+echo "   App UI at    http://localhost:8000/"
 echo "   API docs at  http://localhost:8000/docs"
 echo "   Press Ctrl+C to stop"
 echo ""
-uvicorn api:app --host 0.0.0.0 --port 8000 --reload
+$PY_CMD -m uvicorn api:app --host 0.0.0.0 --port 8000 --reload

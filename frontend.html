@@ -387,25 +387,37 @@ code{font-family:'JetBrains Mono',monospace;font-size:11px;background:var(--surf
   <div class="modal" id="modal-body"></div>
 </div>
 <script>
-const API='http://localhost:8000';
+const origin = window.location.origin;
+const API = (!origin || origin === 'file://' || origin === 'null') ? 'http://localhost:8000' : origin;
 const EMOJI={italian:'🍝',indian:'🍛',mexican:'🌮',american:'🍔',japanese:'🍣',mediterranean:'🥗',chinese:'🥢',french:'🥐',thai:'🌶️',spanish:'🥘',korean:'🍱',unknown:'🍽️'};
 const TC={Vegetarian:'#52c27a',Vegan:'#7eda8a','Gluten-Free':'#f0a435','Dairy-Free':'#4a9eff','Egg-Free':'#f5d742','Nut-Free':'#ff6b35',Pescatarian:'#38d9d9',Balanced:'#8a7aff','High-Protein':'#ff7a9a','Low-Fat':'#5ec4ff','Low-Calorie':'#7eda8a','High-Fiber':'#ff9966','Low-Sugar':'#e87dff','Low-Sodium':'#7ab8ff'};
 const IE={chicken:'🍗',garlic:'🧄',onion:'🧅',tomato:'🍅',egg:'🥚',eggs:'🥚',butter:'🧈',pasta:'🍝',rice:'🍚',beef:'🥩',salmon:'🐟',mushroom:'🍄',mushrooms:'🍄',spinach:'🥬',cheese:'🧀',lemon:'🍋',ginger:'🫚',pepper:'🌶️',avocado:'🥑',potato:'🥔',carrot:'🥕',broccoli:'🥦',shrimp:'🍤',pork:'🥩',tofu:'🫘',cream:'🥛',milk:'🥛',oil:'🫙',flour:'🌾',sugar:'🍬',default:'🥘'};
 
+let SESSION_ID = localStorage.getItem('nomnom_session_id');
+if (!SESSION_ID) {
+    SESSION_ID = 'sess_' + Math.random().toString(36).substr(2, 9);
+    localStorage.setItem('nomnom_session_id', SESSION_ID);
+}
+
 let S={mode:'search',connected:false,results:[],allPantry:[],pantryTab:'all',pantry:[],matchMode:'flexible',allIngs:[],acFocused:-1,f:{diet:[],meal:null,calMin:0,calMax:1000}};
 
-async function api(p,o={}){const r=await fetch(API+p,{headers:{'Content-Type':'application/json'},...o});if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}
+async function api(p,o={}){const r=await fetch(API+p,{headers:{'Content-Type':'application/json'},...o});const d=await r.json();if(d.status==='error'||!r.ok)throw new Error(d.message||'HTTP '+r.status);return d.data;}
 async function post(p,b){return api(p,{method:'POST',body:JSON.stringify(b)});}
 
 async function init(){
   showStatus('Connecting…',false);
   try{
-    const h=await api('/');
+    const h=await api('/health');
+    if (h.status !== 'ok') throw new Error('API not fully loaded');
     S.connected=true;
-    showStatus('Connected · '+h.n_recipes.toLocaleString()+' recipes',true);
-    document.getElementById('stat-recipes').textContent=h.n_recipes.toLocaleString();
-    const[fi,re,il]=await Promise.all([api('/filters'),api('/recipes'),api('/ingredient-list').catch(()=>({ingredients:[]}))]);
+    showStatus('Connected · '+h.recipes_loaded.toLocaleString()+' recipes',true);
+    document.getElementById('stat-recipes').textContent=h.recipes_loaded.toLocaleString();
+    const[fi,re,il,pan]=await Promise.all([api('/filters'),api('/recipes'),api('/ingredient-list').catch(()=>({ingredients:[]})),api('/pantry/'+SESSION_ID).catch(()=>({ingredients:[]}))]);
     S.allIngs=il.ingredients||[];
+    if (pan && pan.ingredients && pan.ingredients.length) {
+        S.pantry = pan.ingredients;
+        renderPantry();
+    }
     document.getElementById('stat-cuisines').textContent=fi.cuisine_types.length;
     document.getElementById('stat-ings').textContent=S.allIngs.length.toLocaleString();
     const cm=Math.ceil(fi.calorie_range[1]/100)*100;
@@ -416,7 +428,8 @@ async function init(){
     buildDiet(fi.diet_labels); buildMeals(fi.meal_types); buildDropdown(re);
     document.getElementById('offline-banner').classList.remove('show');
   }catch(e){
-    S.connected=false; showStatus('API not reachable',false);
+    S.connected=false; showStatus('Error: '+e.message,false);
+    console.error("Initialization error:", e);
     document.getElementById('offline-banner').classList.add('show');
   }
 }
@@ -463,10 +476,11 @@ async function doSimilar(){
 }
 
 // PANTRY
+function syncPantry() { post('/pantry', {session_id: SESSION_ID, ingredients: S.pantry}).catch(console.error); }
 function ingEmoji(n){const k=n.toLowerCase();for(const[e,v]of Object.entries(IE))if(k.includes(e))return v;return IE.default;}
-function addIngredient(n){const c=n.toLowerCase().trim();if(!c||S.pantry.includes(c))return;S.pantry.push(c);renderPantry();document.querySelectorAll('.qing').forEach(el=>{if(el.textContent.includes(c))el.classList.add('added');});}
-function removeIngredient(n){S.pantry=S.pantry.filter(i=>i!==n);renderPantry();document.querySelectorAll('.qing').forEach(el=>{if(el.textContent.includes(n))el.classList.remove('added');});}
-function clearPantry(){S.pantry=[];document.querySelectorAll('.qing').forEach(el=>el.classList.remove('added'));renderPantry();resetArea();}
+function addIngredient(n){const c=n.toLowerCase().trim();if(!c||S.pantry.includes(c))return;S.pantry.push(c);renderPantry();syncPantry();document.querySelectorAll('.qing').forEach(el=>{if(el.textContent.includes(c))el.classList.add('added');});}
+function removeIngredient(n){S.pantry=S.pantry.filter(i=>i!==n);renderPantry();syncPantry();document.querySelectorAll('.qing').forEach(el=>{if(el.textContent.includes(n))el.classList.remove('added');});}
+function clearPantry(){S.pantry=[];syncPantry();document.querySelectorAll('.qing').forEach(el=>el.classList.remove('added'));renderPantry();resetArea();}
 function renderPantry(){
   const wrap=document.getElementById('pantry-tags'),empty=document.getElementById('pantry-empty');
   document.getElementById('ing-count').textContent=S.pantry.length?'('+S.pantry.length+')':'';
