@@ -201,7 +201,7 @@ cuis_emb = norm_rows(pd.get_dummies(df['cuisine']).values.astype(np.float32))
 # ── SAVE ──────────────────────────────────────────────────────────────────────
 print("💾 Saving artifacts...")
 save_cols = [
-    'recipe_id','recipe_name','ingredients_clean','ingredient_lines',
+    'recipe_id','recipe_name','url','source','ingredients_clean','ingredient_lines',
     'cuisine','dish','meal','image_url',
     'calories_per_serving','protein_per_serving','fat_per_serving',
     'carbs_per_serving','fiber_per_serving','sugar_per_serving',

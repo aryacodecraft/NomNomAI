@@ -215,6 +215,7 @@ class RecipeRecommender:
             "dish_type":            str(row.get("dish", "")),
             "meal_type":            str(row.get("meal", "")),
             "image_url":            str(row.get("image_url", "") or ""),
+            "url":                  str(row.get("url") or row.get("recipe_url") or row.get("source_url") or ""),
             "similarity_score":     float(row.get("similarity_score", 0) or 0),
         }
 

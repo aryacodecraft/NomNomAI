@@ -264,6 +264,7 @@ def search_by_ingredients(req: IngredientsRequest):
             "cuisine":              str(row.get('cuisine', '')),
             "dish_type":            str(row.get('dish', '')),
             "meal_type":            str(row.get('meal', '')),
+            "url":                  str(row.get("url") or row.get("recipe_url") or row.get("source_url") or ""),
             "calories_per_serving": float(row.get('calories_per_serving') or 0),
             "protein_g":            float(row.get('protein_per_serving') or 0),
             "fat_g":                float(row.get('fat_per_serving') or 0),
