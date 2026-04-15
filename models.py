@@ -14,7 +14,8 @@ class SearchRequest(BaseModel):
     calorie_min: float = Field(default=0, ge=0)
     calorie_max: float = Field(default=9999, ge=0)
     meal_type: Optional[str] = Field(default=None, example="dinner")
-    top_k: int = Field(default=10, ge=1, le=100)
+    top_k: int = Field(default=20, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
     
     @field_validator('query')
     @classmethod
@@ -28,7 +29,8 @@ class SimilarRequest(BaseModel):
     diet_filters: List[str] = Field(default=[], example=[])
     calorie_min: float = Field(default=0, ge=0)
     calorie_max: float = Field(default=9999, ge=0)
-    top_k: int = Field(default=10, ge=1, le=100)
+    top_k: int = Field(default=20, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
     weights: tuple[float, float, float] = Field(
         default=(0.70, 0.20, 0.10),
         description="(NLP weight, cuisine weight, nutrition weight)"
@@ -41,7 +43,8 @@ class IngredientsRequest(BaseModel):
     diet_filters: List[str] = Field(default=[])
     calorie_min: float = Field(default=0, ge=0)
     calorie_max: float = Field(default=9999, ge=0)
-    top_k: int = Field(default=12, ge=1, le=100)
+    top_k: int = Field(default=20, ge=1, le=100)
+    offset: int = Field(default=0, ge=0)
 
 class PantrySyncRequest(BaseModel):
     session_id: str = Field(..., min_length=1)

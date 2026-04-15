@@ -150,10 +150,14 @@ def search_recipes(req: SearchRequest):
         calorie_max=req.calorie_max,
         meal_type=req.meal_type,
         top_k=req.top_k,
+        offset=req.offset,
     )
     
     resp_data = {
         "query": req.query,
+        "source": {
+            "name": "Unknown"
+        },
         "n_results": len(results),
         "filters_applied": {
             "diet": req.diet_filters,
@@ -178,11 +182,18 @@ def similar_recipes(req: SimilarRequest):
         calorie_min=req.calorie_min,
         calorie_max=req.calorie_max,
         top_k=req.top_k,
+        offset=req.offset,
         weights=tuple(req.weights),
     )
     
+    source_name = source.get("name") if source and "name" in source else source.get("recipe_name", "Unknown") if source else "Unknown"
+    
     resp_data = {
+        "name": source_name,
         "source_recipe": source,
+        "source": {
+            "name": source_name
+        },
         "n_results": len(results),
         "weights": {"nlp": req.weights[0], "cuisine": req.weights[1], "nutrition": req.weights[2]},
         "results": results,
@@ -272,7 +283,7 @@ def search_by_ingredients(req: IngredientsRequest):
         })
 
     results.sort(key=lambda x: (-x['can_make_now'], -x['score'], x['extra_needed']))
-    results = results[:req.top_k]
+    results = results[req.offset : req.offset + req.top_k]
     can_make_now = [r for r in results if r['can_make_now']]
 
     resp_data = {

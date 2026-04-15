@@ -87,15 +87,21 @@ class RecipeRecommender:
             
         mask = pd.Series([True]*len(df), index=df.index)
         for label in (diet_selected or []):
-            col = f"diet_{label.lower().replace('-','_')}"
-            if col in df.columns: mask &= df[col].fillna(0).astype(bool)
-            else: mask &= df["diet_labels"].apply(lambda x: label in (x or []))
+            lower_label = label.lower()
+            col = f"diet_{lower_label.replace('-','_')}"
+            hcol = f"health_{lower_label.replace('-','_')}"
             
-            # Also check health_labels for allergen-type labels (Gluten-Free etc)
-            hcol = f"health_{label.lower().replace('-','_')}"
+            label_mask = pd.Series([False]*len(df), index=df.index)
+            if col in df.columns:
+                label_mask |= df[col].fillna(0).astype(bool)
             if hcol in df.columns:
-                mask &= df[hcol].fillna(0).astype(bool)
+                label_mask |= df[hcol].fillna(0).astype(bool)
                 
+            label_mask |= df["diet_labels"].apply(lambda x: lower_label in [str(i).lower() for i in (x or [])])
+            label_mask |= df["health_labels"].apply(lambda x: lower_label in [str(i).lower() for i in (x or [])])
+            
+            mask &= label_mask
+            
         mask &= (df["calories_per_serving"].fillna(0) >= calorie_min)
         mask &= (df["calories_per_serving"].fillna(0) <= calorie_max)
         if meal_type:
@@ -104,7 +110,7 @@ class RecipeRecommender:
         return df[mask].copy()
 
     def search_by_text(self, query, diet_selected=None, calorie_min=0,
-                       calorie_max=9999, meal_type=None, top_k=10):
+                       calorie_max=9999, meal_type=None, top_k=20, offset=0):
         # Prevent completely empty query crashing the transform
         if not query or not query.strip():
             logger.warning("Search called with empty query")
@@ -122,10 +128,12 @@ class RecipeRecommender:
             
         filtered = filtered.copy()
         filtered["similarity_score"] = sims[filtered.index]
-        return self._format_results(filtered.nlargest(top_k, "similarity_score"))
+        filtered = filtered.sort_values(by="similarity_score", ascending=False)
+        top = filtered.iloc[offset : offset + top_k]
+        return self._format_results(top)
 
     def search_by_recipe(self, recipe_id, diet_selected=None, calorie_min=0,
-                         calorie_max=9999, top_k=10, weights=(0.70, 0.20, 0.10)):
+                         calorie_max=9999, top_k=20, offset=0, weights=(0.70, 0.20, 0.10)):
         idx_s = self.df[self.df["recipe_id"] == recipe_id].index
         if len(idx_s) == 0: 
             logger.warning(f"search_by_recipe: recipe_id {recipe_id} not found.")
@@ -147,7 +155,8 @@ class RecipeRecommender:
         filtered["cuisine_score"]    = (self.cuis_emb @ self.cuis_emb[idx])[filtered.index]
         filtered["nutrition_score"]  = (self.nutr_emb @ self.nutr_emb[idx])[filtered.index]
         
-        top = filtered.nlargest(top_k, "similarity_score")
+        filtered = filtered.sort_values(by="similarity_score", ascending=False)
+        top = filtered.iloc[offset : offset + top_k]
         results = self._format_results(top)
         
         src = self.df[self.df["recipe_id"] == recipe_id].iloc[0]

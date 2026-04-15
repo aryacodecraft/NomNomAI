@@ -380,6 +380,7 @@ code{font-family:'JetBrains Mono',monospace;font-size:11px;background:var(--surf
         <div class="state-sub">Search recipes by text, tell us what ingredients you have, or find dishes similar to ones you love.</div>
       </div>
     </div>
+    <button id="load-more-btn" class="find-btn" style="width:200px; margin:20px auto; display:none;" onclick="loadMore()">Load More</button>
   </main>
 </div>
 
@@ -400,6 +401,11 @@ if (!SESSION_ID) {
 }
 
 let S={mode:'search',connected:false,results:[],allPantry:[],pantryTab:'all',pantry:[],matchMode:'flexible',allIngs:[],acFocused:-1,f:{diet:[],meal:null,calMin:0,calMax:1000}};
+
+let currentOffset = 0;
+const LIMIT = 20;
+let currentQuery = "";
+let allResults = [];
 
 async function api(p,o={}){const r=await fetch(API+p,{headers:{'Content-Type':'application/json'},...o});const d=await r.json();if(d.status==='error'||!r.ok)throw new Error(d.message||'HTTP '+r.status);return d.data;}
 async function post(p,b){return api(p,{method:'POST',body:JSON.stringify(b)});}
@@ -456,22 +462,38 @@ function reapply(){if(S.mode==='search'){const q=document.getElementById('search
 
 function setMode(m){S.mode=m;['search','pantry','similar'].forEach(x=>{document.getElementById('mode-'+x).style.display=x===m?'':'none';document.getElementById('tab-'+x).className='mbt'+(x===m?' active':'');});document.getElementById('pantry-tabs').style.display=m==='pantry'&&S.allPantry.length?'':'none';}
 
-async function doSearch(){
+async function doSearch(isLoadMore = false){
   if(!S.connected){showStatus('Start the API server first',false);return;}
   const q=document.getElementById('search-input').value.trim();if(!q)return;
-  showSkeleton();
-  try{const d=await post('/search',{query:q,diet_filters:S.f.diet,calorie_min:S.f.calMin,calorie_max:S.f.calMax,meal_type:S.f.meal||undefined,top_k:20});
-    S.results=d.results;document.getElementById('pantry-tabs').style.display='none';renderResults(d.results);}
+  if(!isLoadMore) { currentOffset=0; allResults=[]; currentQuery=q; showSkeleton(); }
+  try{const d=await post('/search',{query:currentQuery,diet_filters:S.f.diet,calorie_min:S.f.calMin,calorie_max:S.f.calMax,meal_type:S.f.meal||undefined,top_k:LIMIT,offset:currentOffset});
+    if(!isLoadMore) { allResults = d.results||[]; } else {
+      const newUnique = (d.results||[]).filter(r => !allResults.some(e => e.recipe_id === r.recipe_id || e.name === r.name));
+      allResults = [...allResults, ...newUnique];
+    }
+    S.results=allResults;document.getElementById('pantry-tabs').style.display='none';renderResults(allResults);
+    if(!d.results || d.results.length === 0) hideLoadMoreButton();
+    else if(d.results.length < LIMIT) hideLoadMoreButton();
+    else showLoadMoreButton();
+  }
   catch(e){showError(e.message);}
 }
 function quickSearch(q){setMode('search');document.getElementById('search-input').value=q;doSearch();}
 
-async function doSimilar(){
+async function doSimilar(isLoadMore = false){
   if(!S.connected){showStatus('Start the API server first',false);return;}
   const id=parseInt(document.getElementById('recipe-select').value);if(isNaN(id))return;
-  showSkeleton();
-  try{const d=await post('/similar',{recipe_id:id,diet_filters:S.f.diet,calorie_min:S.f.calMin,calorie_max:S.f.calMax,top_k:20});
-    S.results=d.results;document.getElementById('pantry-tabs').style.display='none';renderResults(d.results,'Similar to "'+d.source.name+'"');}
+  if(!isLoadMore) { currentOffset=0; allResults=[]; showSkeleton(); }
+  try{const d=await post('/similar',{recipe_id:id,diet_filters:S.f.diet,calorie_min:S.f.calMin,calorie_max:S.f.calMax,top_k:LIMIT,offset:currentOffset});
+    if(!isLoadMore) { allResults = d.results||[]; } else {
+      const newUnique = (d.results||[]).filter(r => !allResults.some(e => e.recipe_id === r.recipe_id || e.name === r.name));
+      allResults = [...allResults, ...newUnique];
+    }
+    S.results=allResults;document.getElementById('pantry-tabs').style.display='none';renderResults(allResults,'Similar to "'+(d?.name || "Unknown")+'"');
+    if(!d.results || d.results.length === 0) hideLoadMoreButton();
+    else if(d.results.length < LIMIT) hideLoadMoreButton();
+    else showLoadMoreButton();
+  }
   catch(e){showError(e.message);}
 }
 
@@ -512,25 +534,35 @@ document.addEventListener('click',e=>{if(!e.target.closest('.ing-input-row'))clo
 
 function setMatchMode(m){S.matchMode=m;document.getElementById('mm-flexible').className='mm-opt'+(m==='flexible'?' active':'');document.getElementById('mm-exact').className='mm-opt'+(m==='exact'?' active':'');document.getElementById('mm-extra-wrap').style.opacity=m==='exact'?'0.3':'1';}
 
-async function doIngredientSearch(){
+async function doIngredientSearch(isLoadMore = false){
   if(!S.connected){showStatus('Start the API server first',false);return;}
   if(!S.pantry.length)return;
-  showSkeleton();
+  if(!isLoadMore) { currentOffset=0; allResults=[]; showSkeleton(); }
   try{
     const maxE=parseInt(document.getElementById('max-extra').value)||5;
-    const d=await post('/ingredients',{ingredients:S.pantry,mode:S.matchMode,max_extra:maxE,diet_filters:S.f.diet,calorie_min:S.f.calMin,calorie_max:S.f.calMax,top_k:30});
-    S.allPantry=d.results;
-    const canMake=d.results.filter(r=>r.can_make_now);
-    const fewEx=d.results.filter(r=>!r.can_make_now&&r.extra_needed<=3);
-    document.getElementById('ptab-all-n').textContent='('+d.results.length+')';
-    document.getElementById('ptab-canmake-n').textContent='('+canMake.length+')';
-    document.getElementById('ptab-fewextra-n').textContent='('+fewEx.length+')';
+    const d=await post('/ingredients',{ingredients:S.pantry,mode:S.matchMode,max_extra:maxE,diet_filters:S.f.diet,calorie_min:S.f.calMin,calorie_max:S.f.calMax,top_k:LIMIT,offset:currentOffset});
+    if(!isLoadMore) { allResults = d.results||[]; } else {
+      const newUnique = (d.results||[]).filter(r => !allResults.some(e => e.recipe_id === r.recipe_id || e.name === r.name));
+      allResults = [...allResults, ...newUnique];
+    }
+    S.allPantry=allResults;
+    document.getElementById('ptab-all-n').textContent='';
+    document.getElementById('ptab-canmake-n').textContent='';
+    document.getElementById('ptab-fewextra-n').textContent='';
     document.getElementById('pantry-tabs').style.display='';
-    S.pantryTab='all'; setPantryTab('all',false);
     const bar=document.getElementById('results-bar'),cnt=document.getElementById('results-count'),sub=document.getElementById('results-sub');
-    bar.style.display='flex';cnt.innerHTML='<strong>'+d.results.length+'</strong> recipes found';
-    sub.textContent=canMake.length>0?'✓ '+canMake.length+' you can make right now':'';
-    renderPantryResults(d.results);
+    bar.style.display='flex';cnt.innerHTML='';
+    sub.textContent='';
+    if(!isLoadMore) { S.pantryTab='all'; setPantryTab('all',false); }
+    else { setPantryTab(S.pantryTab,false); }
+    const all=S.allPantry; let shown;
+    if(S.pantryTab==='canmake') shown=all.filter(r=>r.can_make_now);
+    else if(S.pantryTab==='fewextra') shown=all.filter(r=>!r.can_make_now&&r.extra_needed<=3);
+    else shown=all;
+    renderPantryResults(shown);
+    if(!d.results || d.results.length === 0) hideLoadMoreButton();
+    else if(d.results.length < LIMIT) hideLoadMoreButton();
+    else showLoadMoreButton();
   }catch(e){showError(e.message);}
 }
 
@@ -548,8 +580,8 @@ function setPantryTab(t,doR=true){
 function renderResults(results,title){
   const bar=document.getElementById('results-bar'),cnt=document.getElementById('results-count'),sub=document.getElementById('results-sub'),area=document.getElementById('results-area');
   S.results=results;
-  if(!results.length){bar.style.display='none';area.innerHTML=emptyState('No recipes found','Try loosening your filters or different keywords.');return;}
-  bar.style.display='flex';sub.textContent='';cnt.innerHTML=(title?title+' &nbsp; ':'')+' <strong>'+results.length+'</strong> recipes';
+  if(!results.length && currentOffset===0){bar.style.display='none';area.innerHTML=emptyState('No recipes found','Try loosening your filters or different keywords.');return;}
+  bar.style.display='flex';sub.textContent='';cnt.innerHTML=(title?title:'');
   renderSorted();
 }
 function renderSorted(){
@@ -625,6 +657,27 @@ function showSkeleton(){
   document.getElementById('results-area').innerHTML='<div class="skeleton-grid">'+[...Array(9)].map((_,i)=>'<div class="skel-card" style="animation-delay:'+i*40+'ms"><div style="display:flex;justify-content:space-between;margin-bottom:10px"><div class="sk" style="width:32px;height:32px;border-radius:50%"></div><div class="sk" style="width:70px;height:20px;border-radius:10px"></div></div><div class="sk" style="height:15px;width:80%;margin-bottom:5px"></div><div class="sk" style="height:11px;width:55%;margin-bottom:14px"></div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:12px">'+[...Array(4)].map(()=>'<div class="sk" style="height:36px;border-radius:6px"></div>').join('')+'</div><div style="display:flex;gap:5px"><div class="sk" style="width:60px;height:17px;border-radius:9px"></div><div class="sk" style="width:50px;height:17px;border-radius:9px"></div></div></div>').join('')+'</div>';
 }
 function showError(msg){document.getElementById('results-bar').style.display='none';document.getElementById('results-area').innerHTML=emptyState('Error',msg);}
+
+async function loadMore() {
+  const btn = document.getElementById('load-more-btn');
+  btn.textContent = 'Loading...';
+  btn.disabled = true;
+  currentOffset += LIMIT;
+  if(S.mode === 'search') await doSearch(true);
+  else if(S.mode === 'similar') await doSimilar(true);
+  else if(S.mode === 'pantry') await doIngredientSearch(true);
+  btn.textContent = 'Load More';
+  btn.disabled = false;
+}
+
+function hideLoadMoreButton() {
+  const btn = document.getElementById('load-more-btn');
+  if(btn) btn.style.display = 'none';
+}
+function showLoadMoreButton() {
+  const btn = document.getElementById('load-more-btn');
+  if(btn) btn.style.display = 'block';
+}
 function resetArea(){document.getElementById('results-bar').style.display='none';document.getElementById('pantry-tabs').style.display='none';document.getElementById('results-area').innerHTML=emptyState('Ready','Add ingredients above and find what you can make.');}
 function emptyState(t,s){return '<div class="state-wrap"><div class="state-icon">🍽️</div><div class="state-title">'+t+'</div><div class="state-sub">'+s+'</div></div>';}
 
