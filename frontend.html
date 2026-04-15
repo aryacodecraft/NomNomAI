@@ -473,7 +473,18 @@ document.getElementById('cal-min').addEventListener('input',function(){if(+this.
 document.getElementById('cal-max').addEventListener('input',function(){if(+this.value<+document.getElementById('cal-min').value)this.value=document.getElementById('cal-min').value;updateCalDisplay();reapply();});
 function resetFilters(){S.f={diet:[],meal:null,calMin:0,calMax:+document.getElementById('cal-max').max};document.querySelectorAll('.diet-item').forEach(e=>e.classList.remove('active'));document.querySelectorAll('.mpill').forEach(e=>e.classList.remove('active'));document.getElementById('cal-min').value=0;document.getElementById('cal-max').value=document.getElementById('cal-max').max;updateCalDisplay();reapply();}
 document.getElementById('reset-btn').addEventListener('click',resetFilters);
-function reapply(){if(S.mode==='search'){const q=document.getElementById('search-input').value.trim();if(q)doSearch();}else if(S.mode==='similar'){const id=document.getElementById('recipe-select').value;if(id)doSimilar();}else if(S.mode==='pantry'&&S.pantry.length)doIngredientSearch();}
+function reapply() {
+  if (S.mode === 'search') {
+    const q = document.getElementById('search-input').value.trim();
+    if (q) doSearch();
+    else fetchFilteredOnly();
+  } else if (S.mode === 'similar') {
+    const id = document.getElementById('recipe-select').value;
+    if (id) doSimilar();
+  } else if (S.mode === 'pantry' && S.pantry.length) {
+    doIngredientSearch();
+  }
+}
 
 function setMode(m){S.mode=m;['search','pantry','similar'].forEach(x=>{document.getElementById('mode-'+x).style.display=x===m?'':'none';document.getElementById('tab-'+x).className='mbt'+(x===m?' active':'');});document.getElementById('pantry-tabs').style.display=m==='pantry'&&S.allPantry.length?'':'none';}
 
@@ -493,6 +504,40 @@ async function doSearch(isLoadMore = false){
   }
   catch(e){showError(e.message);}
 }
+
+async function fetchFilteredOnly(isLoadMore = false) {
+  if(!S.connected){showStatus('Start the API server first',false);return;}
+  if(!isLoadMore) { currentOffset=0; allResults=[]; currentQuery=""; showSkeleton(); }
+  try {
+    const d=await post('/search',{
+        query:"",
+        diet_filters:S.f.diet,
+        calorie_min:S.f.calMin,
+        calorie_max:S.f.calMax,
+        meal_type:S.f.meal||undefined,
+        top_k:LIMIT,
+        offset:currentOffset
+    });
+    if(!isLoadMore) { allResults = d.results||[]; } else {
+      const newUnique = (d.results||[]).filter(r => !allResults.some(e => e.recipe_id === r.recipe_id || e.name === r.name));
+      allResults = [...allResults, ...newUnique];
+    }
+    S.results=allResults;document.getElementById('pantry-tabs').style.display='none';
+    let titleStr = '';
+    if (S.f.diet.length > 0) {
+        titleStr = `Showing ${S.f.diet.join(', ')} recipes`;
+    } else if (S.f.meal) {
+        titleStr = `Showing ${cap(S.f.meal)} recipes`;
+    } else {
+        titleStr = `Showing all recipes`;
+    }
+    renderResults(allResults, titleStr);
+    if(!d.results || d.results.length === 0) hideLoadMoreButton();
+    else if(d.results.length < LIMIT) hideLoadMoreButton();
+    else showLoadMoreButton();
+  } catch(e){showError(e.message);}
+}
+
 function quickSearch(q){setMode('search');document.getElementById('search-input').value=q;doSearch();}
 
 async function doSimilar(isLoadMore = false){
@@ -679,7 +724,10 @@ async function loadMore() {
   btn.textContent = 'Loading...';
   btn.disabled = true;
   currentOffset += LIMIT;
-  if(S.mode === 'search') await doSearch(true);
+  if(S.mode === 'search') {
+      if (document.getElementById('search-input').value.trim()) await doSearch(true);
+      else await fetchFilteredOnly(true);
+  }
   else if(S.mode === 'similar') await doSimilar(true);
   else if(S.mode === 'pantry') await doIngredientSearch(true);
   btn.textContent = 'Load More';

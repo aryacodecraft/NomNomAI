@@ -9,7 +9,7 @@ class StandardResponse(BaseModel, Generic[T]):
     message: Optional[str] = Field(default=None, description="Optional error or info message")
 
 class SearchRequest(BaseModel):
-    query: str = Field(..., example="healthy vegetarian pasta under 500 calories", min_length=1)
+    query: str = Field(default="", example="healthy vegetarian pasta under 500 calories")
     diet_filters: List[str] = Field(default=[], example=["Vegetarian", "Gluten-Free"])
     calorie_min: float = Field(default=0, ge=0)
     calorie_max: float = Field(default=9999, ge=0)
@@ -17,12 +17,7 @@ class SearchRequest(BaseModel):
     top_k: int = Field(default=20, ge=1, le=100)
     offset: int = Field(default=0, ge=0)
     
-    @field_validator('query')
-    @classmethod
-    def prevent_empty_query(cls, v):
-        if not v or not v.strip():
-            raise ValueError('Query cannot be blank or just spaces')
-        return v.strip()
+
 
 class SimilarRequest(BaseModel):
     recipe_id: int = Field(..., example=10, ge=0)

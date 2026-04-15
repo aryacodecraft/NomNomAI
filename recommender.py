@@ -111,10 +111,15 @@ class RecipeRecommender:
 
     def search_by_text(self, query, diet_selected=None, calorie_min=0,
                        calorie_max=9999, meal_type=None, top_k=20, offset=0):
-        # Prevent completely empty query crashing the transform
         if not query or not query.strip():
-            logger.warning("Search called with empty query")
-            return []
+            filtered = self.apply_filters(self.df, diet_selected, calorie_min, calorie_max, meal_type)
+            if len(filtered) == 0:
+                logger.info("Search by text: 0 results after filtering empty query.")
+                return []
+            filtered = filtered.copy()
+            filtered["similarity_score"] = 0.0
+            top = filtered.iloc[offset : offset + top_k]
+            return self._format_results(top)
             
         q_emb = self.pipeline.transform([query]).astype(np.float32)
         norm = np.linalg.norm(q_emb) 

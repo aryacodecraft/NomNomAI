@@ -139,9 +139,7 @@ def get_filters():
 def search_recipes(req: SearchRequest):
     _ensure_loaded()
     
-    # Handled natively by Pydantic min_length, but double check.
-    if not req.query.strip():
-        raise HTTPException(status_code=400, detail="Query string is blank")
+    # Empty query will be handled directly by the recommender to return filtered catalog.
 
     results = recommender.search_by_text(
         query=req.query,
